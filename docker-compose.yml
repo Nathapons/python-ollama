@@ -1,0 +1,37 @@
+networks:
+  ie_plastic_lab:
+    name: ie_plastic_lab
+    driver: bridge
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    build: .
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - ie_plastic_lab
+
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    ports:
+      - "3000:8080"
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - ENABLE_SIGNUP=true 
+      - DEFAULT_USER_ROLE=pending
+      - OLLAMA_EMAIL=admin@local.com
+      - OLLAMA_NAME=admin
+      - OLLAMA_PASSWORD=ollamaadmin123
+    volumes:
+      - ./open-webui_data:/app/data
+    depends_on:
+      - ollama
+    restart: unless-stopped
+    networks:
+      - ie_plastic_lab

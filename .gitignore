@@ -1,0 +1,5 @@
+ollama_data/
+open-webui_data/
+
+env/
+venv/
