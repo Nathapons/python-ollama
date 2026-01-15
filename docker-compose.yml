@@ -5,13 +5,10 @@ networks:
 
 services:
   ollama:
-    image: ollama/ollama:latest
     build: .
     container_name: ollama
     ports:
       - "11434:11434"
-    volumes:
-      - ./ollama_data:/root/.ollama
     restart: unless-stopped
     networks:
       - ie_plastic_lab
