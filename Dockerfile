@@ -6,7 +6,6 @@ ENV OLLAMA_MODELS=/root/.ollama/models
 # รัน Ollama Serve ชั่วคราว และทำการ Pull โมเดลที่ต้องการ
 RUN nohup bash -c "ollama serve &" && \
     sleep 5 && \
-    ollama pull llama3.2-vision:11b && \
-    ollama pull moondream
+    ollama pull llama3.2-vision
 
 EXPOSE 11434

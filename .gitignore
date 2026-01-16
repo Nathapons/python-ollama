@@ -3,3 +3,8 @@ open-webui_data/
 
 env/
 venv/
+
+./Cat/.DS_Store
+./Dog/.DS_Store
+
+__pycache__

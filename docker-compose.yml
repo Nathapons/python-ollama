@@ -12,6 +12,13 @@ services:
     restart: unless-stopped
     networks:
       - ie_plastic_lab
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 16G
+        reservations:
+          memory: 8G
 
   open-webui:
     image: ghcr.io/open-webui/open-webui:main
