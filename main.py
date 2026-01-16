@@ -5,7 +5,8 @@ import numpy as np
 import google.generativeai as genai
 from PIL import Image
 import time
-import json # เพิ่มเพื่อจัดการ JSON
+import json
+from dotenv import load_dotenv
 
 from utils.image_tools import resize_image
 
@@ -14,10 +15,10 @@ TEST_FOLDER = './dataset'
 DOG_REF_SINGLE = './reference/master_dog.jpg' 
 CAT_REF_SINGLE = './reference/master_cat.jpg'
 
-GEMINI_API_KEY = "AIzaSyCO4KeK_p5TrkTfkMipevbxE0M37IxafvE" # ใส่ Key ของคุณ
+load_dotenv()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
 
-# 1. ตั้งค่ารุ่นโมเดลให้บังคับคืนค่าเป็น JSON (สำคัญมาก!)
 model = genai.GenerativeModel(
     model_name='gemini-2.0-flash-exp',
     generation_config={"response_mime_type": "application/json"}
@@ -52,7 +53,6 @@ def gemini_classify_fixed_ref():
             combined_rgb = cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)
             pil_img = Image.fromarray(combined_rgb)
 
-            # 2. ปรับ Prompt ให้เรียบง่ายขึ้น เพราะเราเซ็ต Mime Type แล้ว
             instruction = """
             Identify the image in the RIGHT panel by comparing it with the DOG (LEFT) and CAT (MIDDLE) references.
             Return a JSON object with keys: "result" (either "DOG" or "CAT") and "confidence" (High, Medium, or Low).
@@ -60,7 +60,6 @@ def gemini_classify_fixed_ref():
 
             response = model.generate_content([instruction, pil_img])
             
-            # 3. แปลง Response Text (String) ให้เป็น Python Dictionary
             try:
                 data = json.loads(response.text)
                 all_results.append({
