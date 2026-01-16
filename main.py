@@ -1,10 +1,13 @@
 import os
+import glob
+
 import cv2
 import numpy as np
-import random
-import glob
 from ollama import Client
+
 from utils.images import get_random_image, resize_image
+from utils.ollama import get_ollama_models
+
 
 # Configuration
 DOG_FOLDER = './dog'
