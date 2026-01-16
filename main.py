@@ -1,113 +1,86 @@
 import os
 import glob
-
 import cv2
 import numpy as np
-from ollama import Client
+import google.generativeai as genai
+from PIL import Image
+import time
+import json # เพิ่มเพื่อจัดการ JSON
 
-from utils.images import get_random_image, resize_image
-from utils.ollama import get_ollama_models
+from utils.image_tools import resize_image
 
+# --- Configuration ---
+TEST_FOLDER = './dataset'
+DOG_REF_SINGLE = './reference/master_dog.jpg' 
+CAT_REF_SINGLE = './reference/master_cat.jpg'
 
-# Configuration
-DOG_FOLDER = './dog'
-CAT_FOLDER = './cat'
-TEST_FOLDER = './test'
-OLLAMA_HOST = 'http://localhost:11434'
-MODEL_NAME = 'llama3.2-vision:11b-instruct-q4_K_M'
+GEMINI_API_KEY = "AIzaSyCO4KeK_p5TrkTfkMipevbxE0M37IxafvE" # ใส่ Key ของคุณ
+genai.configure(api_key=GEMINI_API_KEY)
 
+# 1. ตั้งค่ารุ่นโมเดลให้บังคับคืนค่าเป็น JSON (สำคัญมาก!)
+model = genai.GenerativeModel(
+    model_name='gemini-2.0-flash-exp',
+    generation_config={"response_mime_type": "application/json"}
+)
 
-def classify_images():
-    # 1. Get all test images
-    test_images = []
-    extensions = ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.PNG']
-    for ext in extensions:
-        test_images.extend(glob.glob(os.path.join(TEST_FOLDER, ext)))
+def gemini_classify_fixed_ref():
+    print("📦 Loading Master References...")
+    img_dog_ref = cv2.imread(DOG_REF_SINGLE)
+    img_cat_ref = cv2.imread(CAT_REF_SINGLE)
+
+    if img_dog_ref is None or img_cat_ref is None:
+        print("❌ Error: Cannot find master reference images.")
+        return []
+
+    img_dog_ref = resize_image(img_dog_ref)
+    img_cat_ref = resize_image(img_cat_ref)
+
+    test_images = glob.glob(os.path.join(TEST_FOLDER, '*.[jp][pg]*'))
+    print(f"🔍 Found {len(test_images)} images. Starting...\n")
+
+    all_results = []
     
-    if not test_images:
-        print(f"❌ No images found in {TEST_FOLDER}")
-        return
-
-    print(f"🔍 Found {len(test_images)} test images. Starting classification...\n")
-
-    client = Client(host=OLLAMA_HOST)
-
     for test_img_path in test_images:
         filename = os.path.basename(test_img_path)
-        print(f"🖼️  Processing: {filename}")
-
-        # 2. Select Random Reference Images
-        dog_ref_path = get_random_image(DOG_FOLDER)
-        cat_ref_path = get_random_image(CAT_FOLDER)
-
-        if not dog_ref_path or not cat_ref_path:
-            print("❌ Error: Could not find reference images in Dog or Cat folders.")
-            return
-
-        # 3. Load and Preprocess Images
+        
         try:
             img_test = cv2.imread(test_img_path)
-            img_dog = cv2.imread(dog_ref_path)
-            img_cat = cv2.imread(cat_ref_path)
-
-            if img_test is None or img_dog is None or img_cat is None:
-                print(f"❌ Error loading images for {filename}. Skipping.")
-                continue
-
-            # Resize to standard size
+            if img_test is None: continue
             img_test = resize_image(img_test)
-            img_dog = resize_image(img_dog)
-            img_cat = resize_image(img_cat)
 
-            # 4. Construct Visual Prompt (Horizontal Stack: Dog Ref | Cat Ref | Test Image)
-            # This helps the model compare features side-by-side
-            combined_img = np.hstack((img_dog, img_cat, img_test))
+            combined = np.hstack((img_dog_ref, img_cat_ref, img_test))
+            combined_rgb = cv2.cvtColor(combined, cv2.COLOR_BGR2RGB)
+            pil_img = Image.fromarray(combined_rgb)
+
+            # 2. ปรับ Prompt ให้เรียบง่ายขึ้น เพราะเราเซ็ต Mime Type แล้ว
+            instruction = """
+            Identify the image in the RIGHT panel by comparing it with the DOG (LEFT) and CAT (MIDDLE) references.
+            Return a JSON object with keys: "result" (either "DOG" or "CAT") and "confidence" (High, Medium, or Low).
+            """
+
+            response = model.generate_content([instruction, pil_img])
             
-            _, buffer = cv2.imencode('.jpg', combined_img)
-            image_bytes = buffer.tobytes()
+            # 3. แปลง Response Text (String) ให้เป็น Python Dictionary
+            try:
+                data = json.loads(response.text)
+                all_results.append({
+                    'filename': filename,
+                    'result': data.get('result'),
+                    'confidence': data.get('confidence')
+                })
+            except json.JSONDecodeError:
+                print(f"⚠️ Failed to parse JSON for {filename}")
+
+            time.sleep(5)
 
         except Exception as e:
-            print(f"❌ Error processing images: {e}")
-            continue
+            print(f"❌ Error processing {filename}: {e}")
 
-        # 5. Send to Ollama
-        instruction = """
-        You are an expert image classifier. The image provided corresponds to three panels composed horizontally:
-        - LEFT panel: A reference image of a DOG.
-        - MIDDLE panel: A reference image of a CAT.
-        - RIGHT panel: The TEST image to classify.
-
-        Compare the visual features (ear shape, snout, fur texture, posture) of the TEST image (Right) with the DOG (Left) and CAT (Middle).
-        Determine if the TEST image is a DOG or a CAT.
-
-        Return response in this format:
-        RESULT: [DOG or CAT]
-        CONFIDENCE: [High/Medium/Low]
-        """
-
-        try:
-            response = client.chat(
-                model=MODEL_NAME,
-                messages=[{
-                    'role': 'user',
-                    'content': instruction,
-                    'images': [image_bytes]
-                }],
-                options={
-                    'temperature': 0,           # ปรับเป็น 0 เพื่อความนิ่งที่สุด
-                    'num_predict': 40,          # จำกัดจำนวนคำตอบให้สั้นลงอีก
-                    'top_k': 1,                 # เลือกคำที่มั่นใจที่สุดเพียงคำเดียว
-                    'top_p': 0.1,
-                    'stop': ["\n\n", "The image"] # หยุดทันทีถ้าจะเริ่มอธิบาย หรือขึ้นบรรทัดใหม่ที่ว่างเปล่า
-                }
-            )
-            
-            print(f"✅ Result for {filename}:")
-            print(response['message']['content'].strip())
-            print("-" * 50)
-            
-        except Exception as e:
-            print(f"❌ API Error: {e}")
+    return all_results
 
 if __name__ == '__main__':
-    classify_images()
+    results = gemini_classify_fixed_ref()
+    
+    # พิมพ์ผลลัพธ์แบบสวยงาม
+    import pprint
+    pprint.pprint(results)
