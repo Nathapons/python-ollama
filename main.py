@@ -14,7 +14,7 @@ DOG_FOLDER = './dog'
 CAT_FOLDER = './cat'
 TEST_FOLDER = './test'
 OLLAMA_HOST = 'http://localhost:11434'
-MODEL_NAME = 'llama3.2-vision'
+MODEL_NAME = 'llama3.2-vision:11b-instruct-q4_K_M'
 
 
 def classify_images():
@@ -83,7 +83,6 @@ def classify_images():
         Return response in this format:
         RESULT: [DOG or CAT]
         CONFIDENCE: [High/Medium/Low]
-        REASON: [Brief explanation of matching features]
         """
 
         try:
@@ -95,8 +94,11 @@ def classify_images():
                     'images': [image_bytes]
                 }],
                 options={
-                    'temperature': 0.1, # Lower temperature for more deterministic results
-                    'num_predict': 128
+                    'temperature': 0,           # ปรับเป็น 0 เพื่อความนิ่งที่สุด
+                    'num_predict': 40,          # จำกัดจำนวนคำตอบให้สั้นลงอีก
+                    'top_k': 1,                 # เลือกคำที่มั่นใจที่สุดเพียงคำเดียว
+                    'top_p': 0.1,
+                    'stop': ["\n\n", "The image"] # หยุดทันทีถ้าจะเริ่มอธิบาย หรือขึ้นบรรทัดใหม่ที่ว่างเปล่า
                 }
             )
             
